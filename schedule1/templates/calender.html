@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .cal-header h2 { font-size:22px; }
+  .cal-table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .cal-table th { background:#2c3e50; color:white; padding:10px; text-align:center; font-size:13px; }
+  .cal-table td { border:1px solid #e0e0e0; padding:6px; vertical-align:top; height:100px; width:14.28%; }
+  .cal-table td.empty { background:#fafafa; }
+  .cal-table td.today { background:#eaf4fb; }
+  .day-num { font-size:13px; font-weight:bold; margin-bottom:4px; }
+  .task-chip {
+    font-size:11px; padding:2px 6px; border-radius:10px;
+    margin-bottom:3px; display:flex; justify-content:space-between; align-items:center;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .task-chip form { margin:0; }
+  .task-chip button { background:none; border:none; color:inherit; cursor:pointer; font-size:11px; padding:0 0 0 4px; opacity:.7; }
+  .add-btn { font-size:11px; color:#3498db; text-decoration:none; }
+  .add-btn:hover { text-decoration:underline; }
+  .legend { display:flex; gap:16px; margin-top:16px; font-size:13px; }
+  .legend-item { display:flex; align-items:center; gap:6px; }
+  .legend-dot { width:12px; height:12px; border-radius:50%; }
+</style>
+
+<div class="cal-header">
+  <a href="{{ url_for('main.calendar_view', year=prev_year, month=prev_month) }}" class="btn btn-primary">← 前月</a>
+  <h2>{{ year }}年 {{ month }}月</h2>
+  <a href="{{ url_for('main.calendar_view', year=next_year, month=next_month) }}" class="btn btn-primary">次月 →</a>
+</div>
+
+<table class="cal-table">
+  <tr>
+    {% for day_name in ['月','火','水','木','金','土','日'] %}
+      <th>{{ day_name }}</th>
+    {% endfor %}
+  </tr>
+  {% for week in cal %}
+  <tr>
+    {% for day in week %}
+      {% if day == 0 %}
+        <td class="empty"></td>
+      {% else %}
+        <td class="{{ 'today' if (year == today.year and month == today.month and day == today.day) else '' }}">
+          <div class="day-num">{{ day }}</div>
+          {% for task in tasks_by_day.get(day, []) %}
+            <div class="task-chip priority-{{ task.priority }}">
+              <span style="overflow:hidden;text-overflow:ellipsis;">{{ task.title }}</span>
+              <form method="POST" action="{{ url_for('main.delete_task', task_id=task.id) }}"
+                    onsubmit="return confirm('削除しますか？')">
+                <button type="submit">✕</button>
+              </form>
+            </div>
+          {% endfor %}
+          <a class="add-btn" href="{{ url_for('main.add_task', date='%04d-%02d-%02d'|format(year, month, day)) }}">＋</a>
+        </td>
+      {% endif %}
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="legend">
+  <span>優先度：</span>
+  <div class="legend-item"><div class="legend-dot" style="background:#e74c3c;"></div> 高</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e67e22;"></div> 中</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3498db;"></div> 低</div>
+</div>
+
+{% endblock %}
