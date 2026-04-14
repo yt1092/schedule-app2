@@ -1,4 +1,3 @@
-cat > schedule1/__init__.py << 'EOF'
 import os
 from flask import Flask
 from config import Config
@@ -17,4 +16,3 @@ def create_app():
     return app
 
 app = create_app()
-EOF
