@@ -1,13 +1,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import get_connection
-from datetime import date, timedelta
+from datetime import date
+from functools import wraps
 import calendar
 
 main = Blueprint('main', __name__)
-
-# ─── ログイン必須デコレータ ───
-from functools import wraps
 
 def login_required(f):
     @wraps(f)
@@ -17,32 +15,24 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ─── トップ → カレンダーへリダイレクト ───
 @main.route('/')
 @login_required
 def index():
     return redirect(url_for('main.calendar_view'))
 
-# ─── 会員登録 ───
 @main.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         email = request.form['email'].strip()
         password = request.form['password'].strip()
-
         if not email or not password:
             flash('メールアドレスとパスワードを入力してください。', 'error')
             return render_template('register.html')
-
         hashed = generate_password_hash(password)
-
         try:
             conn = get_connection()
             cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO users (email, hashed_password) VALUES (%s, %s)",
-                (email, hashed)
-            )
+            cur.execute("INSERT INTO users (email, hashed_password) VALUES (%s, %s)", (email, hashed))
             conn.commit()
             cur.close()
             conn.close()
@@ -51,46 +41,38 @@ def register():
         except Exception:
             flash('このメールアドレスはすでに登録されています。', 'error')
             return render_template('register.html')
-
     return render_template('register.html')
 
-# ─── ログイン ───
 @main.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form['email'].strip()
         password = request.form['password'].strip()
-
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("SELECT id, hashed_password FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
         cur.close()
         conn.close()
-
         if user and check_password_hash(user[1], password):
             session['user_id'] = user[0]
             session['email'] = email
             return redirect(url_for('main.calendar_view'))
         else:
             flash('メールアドレスまたはパスワードが間違っています。', 'error')
-
     return render_template('login.html')
 
-# ─── ログアウト ───
 @main.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('main.login'))
 
-# ─── カレンダー表示 ───
 @main.route('/calendar')
 @login_required
 def calendar_view():
     year = request.args.get('year', date.today().year, type=int)
     month = request.args.get('month', date.today().month, type=int)
 
-    # 前月・次月の計算
     if month == 1:
         prev_year, prev_month = year - 1, 12
     else:
@@ -101,34 +83,42 @@ def calendar_view():
     else:
         next_year, next_month = year, month + 1
 
-    # カレンダーの日付グリッド生成
     cal = calendar.monthcalendar(year, month)
 
-    # タスク取得
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        """SELECT id, title, priority, deadline
-           FROM tasks
-           WHERE user_id = %s
-             AND EXTRACT(YEAR FROM deadline) = %s
-             AND EXTRACT(MONTH FROM deadline) = %s
-           ORDER BY priority ASC""",
-        (session['user_id'], year, month)
-    )
+    cur.execute("""
+        SELECT id, title, priority, start_date, deadline
+        FROM tasks
+        WHERE user_id = %s
+          AND deadline >= %s
+          AND start_date <= %s
+        ORDER BY priority ASC
+    """, (session['user_id'], date(year, month, 1),
+          date(year, month, calendar.monthrange(year, month)[1])))
     tasks = cur.fetchall()
     cur.close()
     conn.close()
 
-    # 日付ごとにタスクをまとめる
+    # 日付ごとにタスクをまとめる（期間対応）
     tasks_by_day = {}
     for task in tasks:
-        day = task[3].day
-        tasks_by_day.setdefault(day, []).append({
-            'id': task[0],
-            'title': task[1],
-            'priority': task[2],
-        })
+        task_id, title, priority, start_date, deadline = task
+        # その月の範囲内で表示
+        month_start = date(year, month, 1)
+        month_end = date(year, month, calendar.monthrange(year, month)[1])
+        show_start = max(start_date, month_start)
+        show_end = min(deadline, month_end)
+        d = show_start
+        while d <= show_end:
+            tasks_by_day.setdefault(d.day, []).append({
+                'id': task_id,
+                'title': title,
+                'priority': priority,
+            })
+            d = date(d.year, d.month, d.day + 1) if d.day < show_end.day else show_end
+            if d > show_end:
+                break
 
     return render_template('calendar.html',
         year=year, month=month,
@@ -139,7 +129,6 @@ def calendar_view():
         today=date.today()
     )
 
-# ─── タスク追加 ───
 @main.route('/task/add', methods=['GET', 'POST'])
 @login_required
 def add_task():
@@ -149,35 +138,37 @@ def add_task():
         title = request.form['title'].strip()
         description = request.form.get('description', '').strip()
         priority = int(request.form.get('priority', 3))
+        start_date = request.form['start_date']
         deadline = request.form['deadline']
 
-        if not title or not deadline:
+        if not title or not start_date or not deadline:
             flash('タイトルと日付は必須です。', 'error')
+            return render_template('add_task.html', selected_date=selected_date)
+
+        if start_date > deadline:
+            flash('開始日は終了日より前にしてください。', 'error')
             return render_template('add_task.html', selected_date=selected_date)
 
         conn = get_connection()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO tasks (user_id, title, description, priority, deadline) VALUES (%s, %s, %s, %s, %s)",
-            (session['user_id'], title, description, priority, deadline)
+            "INSERT INTO tasks (user_id, title, description, priority, start_date, deadline) VALUES (%s, %s, %s, %s, %s, %s)",
+            (session['user_id'], title, description, priority, start_date, deadline)
         )
         conn.commit()
         cur.close()
         conn.close()
 
-        # 追加後はそのカレンダーに戻る
         d = date.fromisoformat(deadline)
         return redirect(url_for('main.calendar_view', year=d.year, month=d.month))
 
     return render_template('add_task.html', selected_date=selected_date)
 
-# ─── タスク削除 ───
 @main.route('/task/delete/<int:task_id>', methods=['POST'])
 @login_required
 def delete_task(task_id):
     conn = get_connection()
     cur = conn.cursor()
-    # 自分のタスクのみ削除可能
     cur.execute(
         "DELETE FROM tasks WHERE id = %s AND user_id = %s RETURNING deadline",
         (task_id, session['user_id'])

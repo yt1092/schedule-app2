@@ -19,7 +19,11 @@
       <option value="3" selected>🔵 低</option>
     </select>
 
-    <label style="display:block; margin-bottom:4px; font-size:14px;">日付 <span style="color:red;">*</span></label>
+    <label style="display:block; margin-bottom:4px; font-size:14px;">開始日 <span style="color:red;">*</span></label>
+    <input type="date" name="start_date" value="{{ selected_date }}" required
+      style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; margin-bottom:16px; font-size:14px;" />
+
+    <label style="display:block; margin-bottom:4px; font-size:14px;">終了日 <span style="color:red;">*</span></label>
     <input type="date" name="deadline" value="{{ selected_date }}" required
       style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px; margin-bottom:24px; font-size:14px;" />
 

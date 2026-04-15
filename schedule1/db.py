@@ -25,6 +25,7 @@ def init_db():
             title VARCHAR(255) NOT NULL,
             description TEXT,
             priority INTEGER DEFAULT 3,
+            start_date DATE,
             deadline DATE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
