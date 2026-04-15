@@ -100,25 +100,23 @@ def calendar_view():
     cur.close()
     conn.close()
 
-    # 日付ごとにタスクをまとめる（期間対応）
+# 日付ごとにタスクをまとめる（期間対応）
     tasks_by_day = {}
     for task in tasks:
         task_id, title, priority, start_date, deadline = task
-        # その月の範囲内で表示
         month_start = date(year, month, 1)
         month_end = date(year, month, calendar.monthrange(year, month)[1])
         show_start = max(start_date, month_start)
         show_end = min(deadline, month_end)
-        d = show_start
-        while d <= show_end:
-            tasks_by_day.setdefault(d.day, []).append({
+        current = show_start
+        while current <= show_end:
+            tasks_by_day.setdefault(current.day, []).append({
                 'id': task_id,
                 'title': title,
                 'priority': priority,
             })
-            d = date(d.year, d.month, d.day + 1) if d.day < show_end.day else show_end
-            if d > show_end:
-                break
+            from datetime import timedelta
+            current = current + timedelta(days=1)
 
     return render_template('calendar.html',
         year=year, month=month,
